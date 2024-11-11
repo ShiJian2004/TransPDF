@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 from src.utils.pdf_converter import PDFConverter
 from src.api.ocr_service import OCRService
+from src.platform_adapter import PlatformAdapter  # 添加这行
 
 class ProcessingThread(QThread):
     """处理线程，避免GUI卡死"""
@@ -178,10 +179,9 @@ class MainWindow(QMainWindow):
             "PDF文件 (*.pdf)"
         )
         if filename:
-            normalized_path = PlatformAdapter.normalize_path(filename)
-            self.pdf_path_edit.setText(normalized_path)
+            self.pdf_path_edit.setText(filename)
             # 自动设置输出路径
-            output_path = str(Path(normalized_path).with_suffix('.md'))
+            output_path = str(Path(filename).with_suffix('.md'))
             self.output_path_edit.setText(output_path)
 
     def _select_output(self):
@@ -192,8 +192,7 @@ class MainWindow(QMainWindow):
             "Markdown文件 (*.md)"
         )
         if filename:
-            self.output_path_edit.setText(PlatformAdapter.normalize_path(filename))
-
+            self.output_path_edit.setText(filename)
     def _validate_inputs(self):
         if not self.pdf_path_edit.text():
             QMessageBox.warning(self, "错误", "请选择PDF文件")
