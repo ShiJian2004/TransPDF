@@ -15,14 +15,24 @@ class ProcessingThread(QThread):
     finished = pyqtSignal(bool, str)
     log_updated = pyqtSignal(str)  # 新增日志信号
 
-    def __init__(self, pdf_path, output_path, api_key, model):
+    def __init__(self):
         super().__init__()
-        self.pdf_path = pdf_path
-        self.output_path = output_path
-        self.api_key = api_key
-        self.model = model
-        self.pdf_converter = PDFConverter()
-        self.ocr_service = OCRService()
+        self._check_system_requirements()
+        self.setWindowTitle("PDF OCR 工具")
+        self.setMinimumWidth(800)
+        self.setMinimumHeight(600)
+        self._setup_ui()
+
+    def _check_system_requirements(self):
+        """检查系统要求"""
+        if platform.system() == "Windows" and not PlatformAdapter.get_poppler_path():
+            QMessageBox.warning(
+                self,
+                "系统检查",
+                "未检测到Poppler工具，请确保：\n"
+                "1. 程序目录下存在 poppler-xx 文件夹，或\n"
+                "2. 系统环境变量中包含Poppler路径"
+            )
 
     def run(self):
         try:
@@ -168,9 +178,10 @@ class MainWindow(QMainWindow):
             "PDF文件 (*.pdf)"
         )
         if filename:
-            self.pdf_path_edit.setText(filename)
+            normalized_path = PlatformAdapter.normalize_path(filename)
+            self.pdf_path_edit.setText(normalized_path)
             # 自动设置输出路径
-            output_path = str(Path(filename).with_suffix('.md'))
+            output_path = str(Path(normalized_path).with_suffix('.md'))
             self.output_path_edit.setText(output_path)
 
     def _select_output(self):
@@ -181,7 +192,7 @@ class MainWindow(QMainWindow):
             "Markdown文件 (*.md)"
         )
         if filename:
-            self.output_path_edit.setText(filename)
+            self.output_path_edit.setText(PlatformAdapter.normalize_path(filename))
 
     def _validate_inputs(self):
         if not self.pdf_path_edit.text():
