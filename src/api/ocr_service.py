@@ -18,7 +18,7 @@ class OCRService:
         
         self.prompt = """请将这张图片转化为文本。我的目的是使其可以被语言模型直接读取。要求：
 1. 公式使用LaTeX给出；
-2. 表格使用Markdown给出；
+2. 表格、标题等结构使用Markdown给出；
 3. 图片使用Markdown占位符给出；
 4. 除了OCR结果之外，不要输出任何其他字符；
 5. 用`$`和`$$`而不是`\[`和`\]`来给出公式；
@@ -38,18 +38,19 @@ class OCRService:
             progress = (self.processed_images / self.total_images) * 100
             return progress
 
-    def process_images(self, image_paths: List[str], api_key: str, model: str = "qwen-vl-plus-0809", max_workers: int = 3) -> List[str]:
+    def process_images(self, image_paths: List[str], api_key: str, model: str = "qwen-vl-plus-0809", 
+                    max_workers: int = 3, progress_callback=None) -> List[str]:
         """
         并行处理图片列表，返回OCR结果列表
         max_workers: 最大并行处理线程数
+        progress_callback: 进度回调函数，接收三个参数：当前处理数，总数，消息
         """
         self.total_images = len(image_paths)
         self.processed_images = 0
-        results = [None] * len(image_paths)  # 预分配结果列表
+        results = [None] * len(image_paths)
 
         try:
             with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                # 创建任务列表
                 future_to_index = {
                     executor.submit(
                         self._process_single_image_with_retry, 
@@ -61,26 +62,30 @@ class OCRService:
                     for index, image_path in enumerate(image_paths)
                 }
 
-                # 处理完成的任务
                 for future in concurrent.futures.as_completed(future_to_index):
                     index = future_to_index[future]
                     try:
                         result = future.result()
                         results[index] = result
-                        progress = self._update_progress()
-                        with self.log_lock:
-                            self.logger.info(f"进度: {progress:.1f}% ({self.processed_images}/{self.total_images})")
+                        self.processed_images += 1
+                        
+                        if progress_callback:
+                            progress_callback(
+                                self.processed_images,
+                                self.total_images,
+                                f"正在处理第 {self.processed_images}/{self.total_images} 页"
+                            )
+                            
                     except Exception as e:
                         with self.log_lock:
                             self.logger.error(f"处理图片 {image_paths[index]} 失败: {str(e)}")
                         results[index] = f"[OCR失败: {str(e)}]"
 
-            # 过滤掉None值和失败的结果
             results = [r for r in results if r and not r.startswith("[OCR失败")]
             return results
 
         finally:
-            # 在完成处理后尝试清理临时目录，但不影响主要功能
+            # 清理临时文件的代码保持不变...
             try:
                 temp_dir = Path(image_paths[0]).parent
                 if temp_dir.exists():
